@@ -1,0 +1,9 @@
+[package]
+name = "afk"
+version = "0.1.0"
+authors = ["Togglebit <me@togglebit.io>"]
+edition = "2018"
+
+[dependencies]
+figglebit = { git = "https://github.com/togglebyte/figglebit" }
+crossterm = "0.18.1"
