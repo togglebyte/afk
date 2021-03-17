@@ -1,7 +1,3 @@
-// add a commandline help
-// adjust how inputs are handled and formatted
-// apply some color
-
 use std::io::Write;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
@@ -69,8 +65,10 @@ fn format_time(mut total_sec: i128) -> String {
     )
 }
 
-// const KEEP_RUNNING: &str = "--keep-running";
-// const KEEP_RUNNING_SHORT: &str = "-k";
+// TODO:
+// add a commandline help
+// adjust how inputs are handled and formatted
+// apply some color
 
 // -k keep running negative
 // -h hours
@@ -87,6 +85,10 @@ struct MountainDew {
     seconds: i128,
     color: String,
     words: String,
+}
+
+fn show_help() {
+    println!("Usage: ask \"Some string or a single unquoted word\" -h #HOURS -m #MINUTES -s #SECONDS -c \"#FFFFFF\"\n-c : color is optional. hex format.\n-h -m -s : input by hours, minutes, seconds or their cumulative parts as one type.")
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -119,37 +121,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-
-    //     let keep_running =
-    //         arg.contains(&KEEP_RUNNING.to_string()) || arg.contains(&KEEP_RUNNING_SHORT.to_string());
-
-    //     if keep_running {
-    //         arg = arg
-    //             .iter()
-    //             .filter(|&arg| arg != KEEP_RUNNING && arg != KEEP_RUNNING_SHORT)
-    //             .cloned()
-    //             .collect::<Vec<_>>();
-    //     };
-
-    //     let msg = match arg.get(0) {
-    //         Some(m) => m.to_owned(),
-    //         None => String::new(),
-    //     };
-
-    //     let hours: i128 = match arg.get(1) {
-    //         Some(h) => h.parse().unwrap_or(0),
-    //         None => 0,
-    //     };
-
-    //     let minutes: i128 = match arg.get(2) {
-    //         Some(m) => m.parse().unwrap_or(0),
-    //         None => 0,
-    //     };
-
-    //     let seconds: i128 = match arg.get(3) {
-    //         Some(s) => s.parse().unwrap_or(0),
-    //         None => 0,
-    //     };
 
     let font_data = include_str!("../resources/Ghost.flf").to_owned();
     let font = parse(font_data).unwrap();
