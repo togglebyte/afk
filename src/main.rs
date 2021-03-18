@@ -16,7 +16,7 @@ use figglebit::{cleanup, init, parse, Renderer};
 type Tx = Sender<Event>;
 
 enum Event {
-    CatpeasanTick,
+    Tick,
     Quit,
 }
 
@@ -44,7 +44,7 @@ fn events(tx: Tx) {
 
 fn tick_timer(tx: Tx) {
     thread::spawn(move || loop {
-        let _ = tx.send(Event::CatpeasanTick);
+        let _ = tx.send(Event::Tick);
         thread::sleep(Duration::from_secs(1));
     });
 }
@@ -67,7 +67,7 @@ fn format_time(mut total_sec: i128) -> String {
     )
 }
 
-struct MountainDew {
+struct AfkConfig {
     allow_negative: bool,
     hours: i128,
     minutes: i128,
@@ -76,7 +76,7 @@ struct MountainDew {
     words: String,
 }
 
-impl Default for MountainDew {
+impl Default for AfkConfig {
     fn default() -> Self {
         Self {
             allow_negative: false,
@@ -117,22 +117,22 @@ fn show_error(error: &str) {
     println!("{}", Style::new().fg(Colour::Red).bold().paint(error));
 }
 
-fn parse_args(args: Vec<String>) -> Option<MountainDew> {
-    let mut water_bottle = MountainDew::default();
+fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
+    let mut config = AfkConfig::default();
 
     let mut args = args.iter();
 
     while let Some(arg) = args.next() {
         match arg.to_lowercase().as_ref() {
             "--help" => return None,
-            "-k" => water_bottle.allow_negative = true,
+            "-k" => config.allow_negative = true,
             "-h" | "-m" | "-s" => {
                 if let Some(t) = args.next() {
                     if let Ok(t) = t.parse() {
                         match arg.to_lowercase().as_ref() {
-                            "-h" => water_bottle.hours = t,
-                            "-m" => water_bottle.minutes = t,
-                            "-s" => water_bottle.seconds = t,
+                            "-h" => config.hours = t,
+                            "-m" => config.minutes = t,
+                            "-s" => config.seconds = t,
                             _ => {}
                         }
                     } else {
@@ -145,7 +145,7 @@ fn parse_args(args: Vec<String>) -> Option<MountainDew> {
                 }
             }
             "-c" => {
-                water_bottle.color = {
+                config.color = {
                     if let Some(c) = args.next() {
                         if let Some(c) = parse_color(c) {
                             c
@@ -161,24 +161,24 @@ fn parse_args(args: Vec<String>) -> Option<MountainDew> {
             }
             _ => {
                 // takes the first unquoted word or "quoted string of words" ignoring any words, strings, or invalid commands after
-                if water_bottle.words.is_empty() {
-                    water_bottle.words = arg.to_string();
+                if config.words.is_empty() {
+                    config.words = arg.to_string();
                 }
             }
         }
     }
 
     // prefer some time to act against, unless allow_negative, which is basically just a stopwatch
-    if water_bottle.hours.eq(&0)
-        && water_bottle.minutes.eq(&0)
-        && water_bottle.seconds.eq(&0)
-        && !water_bottle.allow_negative
+    if config.hours.eq(&0)
+        && config.minutes.eq(&0)
+        && config.seconds.eq(&0)
+        && !config.allow_negative
     {
         show_error(&format!("Please specifiy some time or -k for stopwatch."));
         return None;
     }
 
-    Some(water_bottle)
+    Some(config)
 }
 
 fn parse_color(color: &str) -> Option<Colour> {
@@ -208,7 +208,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let water_bottle = match parse_args(arg) {
+    let config = match parse_args(arg) {
         Some(w) => w,
         None => {
             show_help();
@@ -222,18 +222,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     let renderer = Renderer::new(font);
 
     let mut total_seconds =
-        water_bottle.hours * 60 * 60 + water_bottle.minutes * 60 + water_bottle.seconds;
+        config.hours * 60 * 60 + config.minutes * 60 + config.seconds;
     let mut old_lines: Vec<String> = Vec::new();
 
     let (tx, rx) = mpsc::channel();
     events(tx.clone());
     tick_timer(tx);
 
-    let paint = Style::new().fg(water_bottle.color).bold();
+    let paint = Style::new().fg(config.color).bold();
 
     let offset_y = 3;
     stdout.queue(MoveTo(2, offset_y - 1))?;
-    stdout.queue(Print(paint.paint(water_bottle.words)))?;
+    stdout.queue(Print(paint.paint(config.words)))?;
 
     loop {
         let text = &format_time(total_seconds);
@@ -260,8 +260,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         if let Ok(ev) = rx.recv() {
             match ev {
-                Event::CatpeasanTick => {
-                    if total_seconds > 0 || water_bottle.allow_negative {
+                Event::Tick => {
+                    if total_seconds > 0 || config.allow_negative {
                         total_seconds -= 1;
                     }
                     thread::sleep(Duration::from_secs(1));
