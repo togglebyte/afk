@@ -1,13 +1,15 @@
-use std::io::Write;
-use std::sync::mpsc::{self, Sender};
-use std::thread;
-use std::time::Duration;
-use std::{env::args, error::Error};
+use std::{
+    env::args,
+    error::Error,
+    io::Write,
+    sync::mpsc::{self, Sender},
+    thread,
+    time::Duration,
+};
 
-use crossterm::cursor::MoveTo;
-use crossterm::event;
-use crossterm::style::Print;
-use crossterm::QueueableCommand;
+use ansi_term::{Colour, Style};
+
+use crossterm::{cursor::MoveTo, event, style::Print, QueueableCommand};
 
 use figglebit::{cleanup, init, parse, Renderer};
 
@@ -77,18 +79,107 @@ fn format_time(mut total_sec: i128) -> String {
 // -c foreground color
 // "words" or word
 
-#[derive(Default)]
 struct MountainDew {
     allow_negative: bool,
     hours: i128,
     minutes: i128,
     seconds: i128,
-    color: String,
+    color: Colour,
     words: String,
+}
+
+impl Default for MountainDew {
+    fn default() -> Self {
+        Self {
+            allow_negative: true,
+            hours: 0,
+            minutes: 0,
+            seconds: 0,
+            color: Colour::Red,
+            words: "".to_string(),
+        }
+    }
 }
 
 fn show_help() {
     println!("Usage: ask \"Some string or a single unquoted word\" -h #HOURS -m #MINUTES -s #SECONDS -c \"#FFFFFF\"\n-c : color is optional. hex format.\n-h -m -s : input by hours, minutes, seconds or their cumulative parts as one type.")
+}
+
+fn show_error(error: &str) {
+    // println!("{}", Colour::Red.paint(error));
+    println!("{}", Style::new().fg(Colour::Red).bold().paint(error));
+}
+
+fn parse_args(args: Vec<String>) -> Option<MountainDew> {
+    let mut water_bottle = MountainDew::default();
+
+    let mut args = args.iter();
+
+    while let Some(arg) = args.next() {
+        match arg.to_lowercase().as_ref() {
+            "-k" => water_bottle.allow_negative = true,
+            // FIXME: handle so we can fall back to help display
+            "-h" | "-m" | "-s" => {
+                if let Some(t) = args.next() {
+                    if let Ok(t) = t.parse() {
+                        match arg.to_lowercase().as_ref() {
+                            "-h" => water_bottle.hours = t,
+                            "-m" => water_bottle.minutes = t,
+                            "-s" => water_bottle.seconds = t,
+                            _ => {}
+                        }
+                    } else {
+                        show_error(&format!("Cannout parse number after {}.", arg));
+                        return None;
+                    }
+                } else {
+                    show_error(&format!("Missing number after {}.", arg));
+                    return None;
+                }
+            }
+            "-c" => {
+                water_bottle.color = {
+                    if let Some(c) = args.next() {
+                        if let Some(c) = parse_color(c) {
+                            c
+                        } else {
+                            show_error(&format!("Unknown color after {}.", arg));
+                            return None;
+                        }
+                    } else {
+                        show_error(&format!("Missing color after {}.", arg));
+                        return None;
+                    }
+                }
+            }
+            _ => {
+                // takes the first unquoted word or "quoted string of words" ignoring any words, strings, or invalid commands after
+                if water_bottle.words.is_empty() {
+                    water_bottle.words = arg.to_string();
+                }
+            }
+        }
+    }
+
+    Some(water_bottle)
+}
+
+fn parse_color(color: &str) -> Option<Colour> {
+    let color = match color.to_lowercase().as_ref() {
+        "black" => Colour::Black,
+        "red" => Colour::Red,
+        "green" => Colour::Green,
+        "yellow" => Colour::Yellow,
+        "blue" => Colour::Blue,
+        "purple" => Colour::Purple,
+        "cyan" => Colour::Cyan,
+        "white" => Colour::White,
+        // Fixed(u8),
+        // RGB(u8, u8, u8),
+        _ => return None,
+    };
+
+    Some(color)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -100,27 +191,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let mut arg_iter = arg.iter();
-    let mut water_bottle = MountainDew::default();
-
-    while let Some(arg) = arg_iter.next() {
-        match arg.as_ref() {
-            "-k" => water_bottle.allow_negative = true,
-            // FIXME: handle so we can fall back to help display
-            "-h" => water_bottle.hours = arg_iter.next().unwrap().parse().unwrap_or(0),
-            "-m" => water_bottle.minutes = arg_iter.next().unwrap().parse().unwrap_or(0),
-            "-s" => water_bottle.seconds = arg_iter.next().unwrap().parse().unwrap_or(0),
-            "-c" => water_bottle.color = arg_iter.next().unwrap().to_string(),
-            s715209 => {
-                if water_bottle.words.is_empty() {
-                    water_bottle.words = s715209.to_string();
-                } else {
-                    println!("Chill with the funny business. One string bro.");
-                    return Ok(());
-                }
-            }
+    let water_bottle = match parse_args(arg) {
+        Some(w) => w,
+        None => {
+            show_help();
+            return Ok(());
         }
-    }
+    };
 
     let font_data = include_str!("../resources/Ghost.flf").to_owned();
     let font = parse(font_data).unwrap();
@@ -178,7 +255,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    cleanup();
+    cleanup(&mut stdout);
 
     Ok(())
 }
