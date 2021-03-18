@@ -68,9 +68,8 @@ fn format_time(mut total_sec: i128) -> String {
 }
 
 // TODO:
-// add a commandline help
-// adjust how inputs are handled and formatted
-// apply some color
+// add a commandline help -h --h --help -? --? /? etc
+// apply some color to the clock output
 
 // -k keep running negative
 // -h hours
@@ -186,8 +185,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = args().skip(1).collect::<Vec<_>>();
 
     // display a helper, so they know how to use it
-    if arg.len() <= 0 {
-        println!("You need some help, and eventually will get it.");
+    if arg.is_empty()  {
+        show_error("You need some help, and eventually will get it.");
         return Ok(());
     }
 
@@ -221,25 +220,22 @@ fn main() -> Result<(), Box<dyn Error>> {
         let mut buf = Vec::new();
         renderer.render(&text, &mut buf)?;
 
-        match String::from_utf8(buf) {
-            Ok(txt) => {
-                let lines = txt.lines().map(|l| l.to_string()).collect::<Vec<_>>();
+        if let Ok(txt) = String::from_utf8(buf) {
+            let lines = txt.lines().map(|l| l.to_string()).collect::<Vec<_>>();
 
-                for (i, line) in old_lines.drain(..).enumerate() {
-                    stdout.queue(MoveTo(0, offset_y + i as u16))?;
-                    let line = line.to_string();
-                    stdout.queue(Print(" ".repeat(line.len())))?;
-                }
-
-                for (i, line) in lines.iter().enumerate() {
-                    stdout.queue(MoveTo(0, offset_y + i as u16))?;
-                    stdout.queue(Print(&line))?;
-                }
-
-                old_lines = lines;
-                stdout.flush()?;
+            for (i, line) in old_lines.drain(..).enumerate() {
+                stdout.queue(MoveTo(0, offset_y + i as u16))?;
+                let line = line.to_string();
+                stdout.queue(Print(" ".repeat(line.len())))?;
             }
-            Err(_) => {}
+
+            for (i, line) in lines.iter().enumerate() {
+                stdout.queue(MoveTo(0, offset_y + i as u16))?;
+                stdout.queue(Print(&line))?;
+            }
+
+            old_lines = lines;
+            stdout.flush()?;
         }
 
         if let Ok(ev) = rx.recv() {
