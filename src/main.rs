@@ -90,7 +90,7 @@ struct MountainDew {
 impl Default for MountainDew {
     fn default() -> Self {
         Self {
-            allow_negative: true,
+            allow_negative: false,
             hours: 0,
             minutes: 0,
             seconds: 0,
@@ -100,12 +100,12 @@ impl Default for MountainDew {
     }
 }
 
+// TODO: format this with nice colors and stuff
 fn show_help() {
     println!("Usage: ask \"Some string or a single unquoted word\" -h #HOURS -m #MINUTES -s #SECONDS -c \"#FFFFFF\"\n-c : color is optional. hex format.\n-h -m -s : input by hours, minutes, seconds or their cumulative parts as one type.")
 }
 
 fn show_error(error: &str) {
-    // println!("{}", Colour::Red.paint(error));
     println!("{}", Style::new().fg(Colour::Red).bold().paint(error));
 }
 
@@ -117,7 +117,6 @@ fn parse_args(args: Vec<String>) -> Option<MountainDew> {
     while let Some(arg) = args.next() {
         match arg.to_lowercase().as_ref() {
             "-k" => water_bottle.allow_negative = true,
-            // FIXME: handle so we can fall back to help display
             "-h" | "-m" | "-s" => {
                 if let Some(t) = args.next() {
                     if let Ok(t) = t.parse() {
@@ -160,6 +159,16 @@ fn parse_args(args: Vec<String>) -> Option<MountainDew> {
         }
     }
 
+    // prefer some time to act against, unless allow_negative, which is basically just a stopwatch
+    if water_bottle.hours.eq(&0)
+        && water_bottle.minutes.eq(&0)
+        && water_bottle.seconds.eq(&0)
+        && !water_bottle.allow_negative
+    {
+        show_error(&format!("Please specifiy some time or -k for stopwatch."));
+        return None;
+    }
+
     Some(water_bottle)
 }
 
@@ -185,7 +194,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let arg = args().skip(1).collect::<Vec<_>>();
 
     // display a helper, so they know how to use it
-    if arg.is_empty()  {
+    if arg.is_empty() {
         show_error("You need some help, and eventually will get it.");
         return Ok(());
     }
@@ -211,9 +220,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     events(tx.clone());
     tick_timer(tx);
 
+    let paint = Style::new().fg(water_bottle.color).bold();
+
     let offset_y = 3;
     stdout.queue(MoveTo(2, offset_y - 1))?;
-    stdout.queue(Print(water_bottle.words))?;
+    stdout.queue(Print(paint.paint(water_bottle.words)))?;
 
     loop {
         let text = &format_time(total_seconds);
@@ -231,7 +242,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             for (i, line) in lines.iter().enumerate() {
                 stdout.queue(MoveTo(0, offset_y + i as u16))?;
-                stdout.queue(Print(&line))?;
+                stdout.queue(Print(paint.paint(line)))?;
             }
 
             old_lines = lines;
