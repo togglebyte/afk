@@ -204,7 +204,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // display a helper, so they know how to use it
     if arg.is_empty() {
-        show_error("You need some help, and eventually will get it.");
+        show_help();
         return Ok(());
     }
 
