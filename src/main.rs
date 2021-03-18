@@ -67,17 +67,6 @@ fn format_time(mut total_sec: i128) -> String {
     )
 }
 
-// TODO:
-// add a commandline help -h --h --help -? --? /? etc
-// apply some color to the clock output
-
-// -k keep running negative
-// -h hours
-// -m minutes
-// -s seconds
-// -c foreground color
-// "words" or word
-
 struct MountainDew {
     allow_negative: bool,
     hours: i128,
@@ -94,7 +83,7 @@ impl Default for MountainDew {
             hours: 0,
             minutes: 0,
             seconds: 0,
-            color: Colour::Red,
+            color: Colour::White,
             words: "".to_string(),
         }
     }
@@ -102,7 +91,26 @@ impl Default for MountainDew {
 
 // TODO: format this with nice colors and stuff
 fn show_help() {
-    println!("Usage: ask \"Some string or a single unquoted word\" -h #HOURS -m #MINUTES -s #SECONDS -c \"#FFFFFF\"\n-c : color is optional. hex format.\n-h -m -s : input by hours, minutes, seconds or their cumulative parts as one type.")
+    let help = r#"
+Usage: afk "some text to show" -h # -m # -s # -k -c blue
+
+Text to display can be empty, a single word, or a "quoted string" of words.
+
+-h #  Number of hours to count down
+-m #  Number of minutes to count down
+-s #  Number of seconds to count down
+You can enter time in any combination of hms or just one.
+The application will adjust it. Ex: -s 90 will translate to 1m 30s.
+
+-c color  colors the text with a bold foreground color.
+Colors: Black, Red, Green, Yellow, Blue, Purple, Cyan, White
+
+-k  Allow countdown to go negative / Stopwatch mode
+
+--help  shows this help
+"#;
+
+    println!("{}", Style::new().fg(Colour::Blue).bold().paint(help));
 }
 
 fn show_error(error: &str) {
@@ -116,6 +124,7 @@ fn parse_args(args: Vec<String>) -> Option<MountainDew> {
 
     while let Some(arg) = args.next() {
         match arg.to_lowercase().as_ref() {
+            "--help" => return None,
             "-k" => water_bottle.allow_negative = true,
             "-h" | "-m" | "-s" => {
                 if let Some(t) = args.next() {
