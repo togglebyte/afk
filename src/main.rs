@@ -4,7 +4,7 @@ use std::{
     io::Write,
     sync::mpsc::{self, Sender},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use ansi_term::{Colour, Style};
@@ -74,6 +74,9 @@ struct AfkConfig {
     seconds: i128,
     color: Colour,
     words: String,
+    blink_timer: Instant,
+    blink_rate: u64, // in ms
+    is_blinking: bool,
 }
 
 impl Default for AfkConfig {
@@ -85,6 +88,18 @@ impl Default for AfkConfig {
             seconds: 0,
             color: Colour::White,
             words: "".to_string(),
+            blink_timer: Instant::now(),
+            blink_rate: 500,
+            is_blinking: false,
+        }
+    }
+}
+
+impl AfkConfig {
+    fn flip_blinker(&mut self) {
+        if self.blink_timer.elapsed() >= Duration::from_millis(self.blink_rate) {
+            self.is_blinking = !self.is_blinking;
+            self.blink_timer = Instant::now();
         }
     }
 }
@@ -208,7 +223,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let config = match parse_args(arg) {
+    let mut config = match parse_args(arg) {
         Some(w) => w,
         None => {
             show_help();
@@ -221,8 +236,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut stdout = init().unwrap();
     let renderer = Renderer::new(font);
 
-    let mut total_seconds =
-        config.hours * 60 * 60 + config.minutes * 60 + config.seconds;
+    let mut total_seconds = config.hours * 60 * 60 + config.minutes * 60 + config.seconds;
     let mut old_lines: Vec<String> = Vec::new();
 
     let (tx, rx) = mpsc::channel();
@@ -233,12 +247,21 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let offset_y = 3;
     stdout.queue(MoveTo(2, offset_y - 1))?;
-    stdout.queue(Print(paint.paint(config.words)))?;
+    stdout.queue(Print(paint.paint(&config.words)))?;
 
     loop {
-        let text = &format_time(total_seconds);
+        #[allow(unused_assignments)]
+        let mut text = String::new();
         let mut buf = Vec::new();
-        renderer.render(&text, &mut buf)?;
+
+        if total_seconds == 0 && !config.allow_negative {
+            config.flip_blinker();
+        }
+
+        if !config.is_blinking {
+            text = format_time(total_seconds);
+            renderer.render(&text, &mut buf)?;
+        }
 
         if let Ok(txt) = String::from_utf8(buf) {
             let lines = txt.lines().map(|l| l.to_string()).collect::<Vec<_>>();
@@ -258,17 +281,18 @@ fn main() -> Result<(), Box<dyn Error>> {
             stdout.flush()?;
         }
 
-        if let Ok(ev) = rx.recv() {
+        if let Ok(ev) = rx.try_recv() {
             match ev {
                 Event::Tick => {
                     if total_seconds > 0 || config.allow_negative {
                         total_seconds -= 1;
                     }
-                    thread::sleep(Duration::from_secs(1));
                 }
                 Event::Quit => break,
             }
         }
+
+        thread::sleep(Duration::from_millis(100));
     }
 
     cleanup(&mut stdout);
