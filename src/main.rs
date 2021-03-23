@@ -44,8 +44,8 @@ fn events(tx: Tx) {
 
 fn tick_timer(tx: Tx) {
     thread::spawn(move || loop {
-        let _ = tx.send(Event::Tick);
         thread::sleep(Duration::from_secs(1));
+        let _ = tx.send(Event::Tick);
     });
 }
 
