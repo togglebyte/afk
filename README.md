@@ -1,3 +1,6 @@
+**Note** this entire project is a bit of a hack thrown together as I needed a
+timer.
+
 Usage: afk "some text to show" -h # -m # -s # -k -c blue
 
 Text to display can be empty, a single word, or a "quoted string" of words.

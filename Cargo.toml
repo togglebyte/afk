@@ -5,7 +5,6 @@ authors = ["Togglebit <me@togglebit.io>"]
 edition = "2018"
 
 [dependencies]
-# figglebit = { git = "https://github.com/togglebyte/figglebit" }
-figglebit = { path = "../figglebit" }
+figglebit = { git = "https://github.com/togglebyte/figglebit" }
 crossterm = "0.18.1"
 ansi_term = "0.12.1"

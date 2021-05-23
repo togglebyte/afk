@@ -64,6 +64,7 @@ dependencies = [
 [[package]]
 name = "figglebit"
 version = "0.1.0"
+source = "git+https://github.com/togglebyte/figglebit#0a8149647e3214506399c53df91ba9077cb366ce"
 dependencies = [
  "bitflags",
  "crossterm",
