@@ -8,9 +8,7 @@ use std::{
 };
 
 use ansi_term::{Colour, Style};
-
 use crossterm::{cursor::MoveTo, event, style::Print, QueueableCommand};
-
 use figglebit::{cleanup, init, parse, Renderer};
 
 type Tx = Sender<Event>;
@@ -119,6 +117,7 @@ The application will adjust it. Ex: -s 90 will translate to 1m 30s.
 
 -c color  colors the text with a bold foreground color.
 Colors: Black, Red, Green, Yellow, Blue, Purple, Cyan, White
+Color can be an comma separated RGB value: 42,42,42
 
 -k  Allow countdown to go negative / Stopwatch mode
 
@@ -206,9 +205,32 @@ fn parse_color(color: &str) -> Option<Colour> {
         "purple" => Colour::Purple,
         "cyan" => Colour::Cyan,
         "white" => Colour::White,
-        // Fixed(u8),
-        // RGB(u8, u8, u8),
-        _ => return None,
+        _ => {
+            // Check for RGB color value formatted as 42,42,42
+            if color.contains(',') {
+                let rgb_str: Vec<&str> = color.split(',').collect();
+
+                if rgb_str.len().eq(&3) {
+                    let mut rgb: Vec<u8> = Vec::with_capacity(3);
+
+                    for maybe_u8 in rgb_str {
+                        if let Ok(u) = maybe_u8.parse::<u8>() {
+                            rgb.push(u);
+                        } else {
+                            show_error("RGB values should be a number from 0 to 255");
+                            return None;
+                        }
+                    }
+
+                    Colour::RGB(rgb[0], rgb[1], rgb[2])
+                } else {
+                    show_error("RGB values should have 3 numbers separated by commas.");
+                    return None;
+                }
+            } else {
+                return None;
+            }
+        }
     };
 
     Some(color)
