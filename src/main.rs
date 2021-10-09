@@ -22,7 +22,10 @@ fn events(tx: Tx) {
     thread::spawn(move || loop {
         if let Ok(ev) = event::read() {
             match ev {
-                event::Event::Key(event::KeyEvent { code: event::KeyCode::Esc, .. }) => {
+                event::Event::Key(event::KeyEvent {
+                    code: event::KeyCode::Esc,
+                    ..
+                }) => {
                     let _ = tx.send(Event::Quit);
                 }
                 event::Event::Key(event::KeyEvent {
@@ -56,8 +59,16 @@ fn format_time(mut total_sec: i128, show_zeroes: bool) -> String {
     format!(
         "{}{}{}{:0>2}",
         if is_less_than_zero { "-" } else { "" },
-        if hours.eq(&0) && !show_zeroes { "".to_string() } else { format!("{:0>2}:", hours) },
-        if hours.eq(&0) && minutes.eq(&0) && !show_zeroes { "".to_string() } else { format!("{:0>2}:", minutes) },
+        if hours.eq(&0) && !show_zeroes {
+            "".to_string()
+        } else {
+            format!("{:0>2}:", hours)
+        },
+        if hours.eq(&0) && minutes.eq(&0) && !show_zeroes {
+            "".to_string()
+        } else {
+            format!("{:0>2}:", minutes)
+        },
         seconds
     )
 }
@@ -187,7 +198,11 @@ fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
     }
 
     // prefer some time to act against, unless allow_negative, which is basically just a stopwatch
-    if config.hours.eq(&0) && config.minutes.eq(&0) && config.seconds.eq(&0) && !config.allow_negative {
+    if config.hours.eq(&0)
+        && config.minutes.eq(&0)
+        && config.seconds.eq(&0)
+        && !config.allow_negative
+    {
         show_error(&format!("Please specifiy some time or -k for stopwatch."));
         return None;
     }
