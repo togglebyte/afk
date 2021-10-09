@@ -22,10 +22,7 @@ fn events(tx: Tx) {
     thread::spawn(move || loop {
         if let Ok(ev) = event::read() {
             match ev {
-                event::Event::Key(event::KeyEvent {
-                    code: event::KeyCode::Esc,
-                    ..
-                }) => {
+                event::Event::Key(event::KeyEvent { code: event::KeyCode::Esc, .. }) => {
                     let _ = tx.send(Event::Quit);
                 }
                 event::Event::Key(event::KeyEvent {
@@ -56,13 +53,7 @@ fn format_time(mut total_sec: i128) -> String {
     let minutes = total_sec / 60 - (hours * 60);
     let seconds = total_sec - minutes * 60 - hours * 60 * 60;
 
-    format!(
-        "{}{:0>2}:{:0>2}:{:0>2}",
-        if is_less_than_zero { "-" } else { "" },
-        hours,
-        minutes,
-        seconds
-    )
+    format!("{}{:0>2}:{:0>2}:{:0>2}", if is_less_than_zero { "-" } else { "" }, hours, minutes, seconds)
 }
 
 struct AfkConfig {
@@ -127,8 +118,11 @@ Color can be an comma separated RGB value: 42,42,42
     println!("{}", Style::new().fg(Colour::Blue).bold().paint(help));
 }
 
-fn show_error(error: &str) {
-    println!("{}", Style::new().fg(Colour::Red).bold().paint(error));
+macro_rules! show_error {
+    ($error:expr) => {{
+        println!("{}", Style::new().fg(Colour::Red).bold().paint($error));
+        return None;
+    }};
 }
 
 fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
@@ -140,36 +134,26 @@ fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
         match arg.to_lowercase().as_ref() {
             "--help" => return None,
             "-k" => config.allow_negative = true,
-            "-h" | "-m" | "-s" => {
-                if let Some(t) = args.next() {
-                    if let Ok(t) = t.parse() {
-                        match arg.to_lowercase().as_ref() {
-                            "-h" => config.hours = t,
-                            "-m" => config.minutes = t,
-                            "-s" => config.seconds = t,
-                            _ => {}
-                        }
-                    } else {
-                        show_error(&format!("Cannout parse number after {}.", arg));
-                        return None;
-                    }
-                } else {
-                    show_error(&format!("Missing number after {}.", arg));
-                    return None;
-                }
-            }
+            "-h" | "-m" | "-s" => match args.next() {
+                Some(t) => match t.parse() {
+                    Ok(t) => match arg.to_lowercase().as_ref() {
+                        "-h" => config.hours = t,
+                        "-m" => config.minutes = t,
+                        "-s" => config.seconds = t,
+                        _ => {}
+                    },
+                    Err(_) => show_error!(&format!("Cannout parse number after {}.", arg)),
+                },
+                None => show_error!(&format!("Missing number after {}.", arg)),
+            },
             "-c" => {
                 config.color = {
-                    if let Some(c) = args.next() {
-                        if let Some(c) = parse_color(c) {
-                            c
-                        } else {
-                            show_error(&format!("Unknown color after {}.", arg));
-                            return None;
-                        }
-                    } else {
-                        show_error(&format!("Missing color after {}.", arg));
-                        return None;
+                    match args.next() {
+                        Some(c) => match parse_color(c) {
+                            Some(c) => c,
+                            None => show_error!(&format!("Unknown color after {}.", arg)),
+                        },
+                        None => show_error!(&format!("Missing color after {}.", arg)),
                     }
                 }
             }
@@ -183,13 +167,8 @@ fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
     }
 
     // prefer some time to act against, unless allow_negative, which is basically just a stopwatch
-    if config.hours.eq(&0)
-        && config.minutes.eq(&0)
-        && config.seconds.eq(&0)
-        && !config.allow_negative
-    {
-        show_error(&format!("Please specifiy some time or -k for stopwatch."));
-        return None;
+    if config.hours.eq(&0) && config.minutes.eq(&0) && config.seconds.eq(&0) && !config.allow_negative {
+        show_error!(&format!("Please specifiy some time or -k for stopwatch."));
     }
 
     Some(config)
@@ -207,29 +186,18 @@ fn parse_color(color: &str) -> Option<Colour> {
         "white" => Colour::White,
         _ => {
             // Check for RGB color value formatted as 42,42,42
-            if color.contains(',') {
-                let rgb_str: Vec<&str> = color.split(',').collect();
+            let rgb = color
+                .contains(&[',', ' '][..])
+                .then(|| color.split(&[',', ' '][..])
+                    .map(str::parse::<u8>)
+                    .filter_map(Result::ok)
+                    .collect::<Vec<u8>>())?;
 
-                if rgb_str.len().eq(&3) {
-                    let mut rgb: Vec<u8> = Vec::with_capacity(3);
-
-                    for maybe_u8 in rgb_str {
-                        if let Ok(u) = maybe_u8.parse::<u8>() {
-                            rgb.push(u);
-                        } else {
-                            show_error("RGB values should be a number from 0 to 255");
-                            return None;
-                        }
-                    }
-
-                    Colour::RGB(rgb[0], rgb[1], rgb[2])
-                } else {
-                    show_error("RGB values should have 3 numbers separated by commas.");
-                    return None;
-                }
-            } else {
-                return None;
+            if rgb.len() != 3 {
+                show_error!("RGB values should have 3 numbers separated by commas.");
             }
+
+            Colour::RGB(rgb[0], rgb[1], rgb[2])
         }
     };
 
