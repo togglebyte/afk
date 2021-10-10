@@ -22,7 +22,10 @@ fn events(tx: Tx) {
     thread::spawn(move || loop {
         if let Ok(ev) = event::read() {
             match ev {
-                event::Event::Key(event::KeyEvent { code: event::KeyCode::Esc, .. }) => {
+                event::Event::Key(event::KeyEvent {
+                    code: event::KeyCode::Esc,
+                    ..
+                }) => {
                     let _ = tx.send(Event::Quit);
                 }
                 event::Event::Key(event::KeyEvent {
@@ -44,7 +47,7 @@ fn tick_timer(tx: Tx) {
     });
 }
 
-fn format_time(mut total_sec: i128) -> String {
+fn format_time(mut total_sec: i128, show_zeroes: bool) -> String {
     let is_less_than_zero = total_sec < 0;
     if is_less_than_zero {
         total_sec *= -1;
@@ -53,7 +56,21 @@ fn format_time(mut total_sec: i128) -> String {
     let minutes = total_sec / 60 - (hours * 60);
     let seconds = total_sec - minutes * 60 - hours * 60 * 60;
 
-    format!("{}{:0>2}:{:0>2}:{:0>2}", if is_less_than_zero { "-" } else { "" }, hours, minutes, seconds)
+    format!(
+        "{}{}{}{:0>2}",
+        if is_less_than_zero { "-" } else { "" },
+        if hours.eq(&0) && !show_zeroes {
+            "".to_string()
+        } else {
+            format!("{:0>2}:", hours)
+        },
+        if hours.eq(&0) && minutes.eq(&0) && !show_zeroes {
+            "".to_string()
+        } else {
+            format!("{:0>2}:", minutes)
+        },
+        seconds
+    )
 }
 
 struct AfkConfig {
@@ -66,6 +83,7 @@ struct AfkConfig {
     blink_timer: Instant,
     blink_rate: u64, // in ms
     is_blinking: bool,
+    show_zeroes: bool,
 }
 
 impl Default for AfkConfig {
@@ -80,6 +98,7 @@ impl Default for AfkConfig {
             blink_timer: Instant::now(),
             blink_rate: 500,
             is_blinking: false,
+            show_zeroes: true,
         }
     }
 }
@@ -110,7 +129,9 @@ The application will adjust it. Ex: -s 90 will translate to 1m 30s.
 Colors: Black, Red, Green, Yellow, Blue, Purple, Cyan, White
 Color can be an comma separated RGB value: 42,42,42
 
--k  Allow countdown to go negative / Stopwatch mode
+-k Allow countdown to go negative / Stopwatch mode
+
+-0 Hide hour or minutes when zero
 
 --help  shows this help
 "#;
@@ -154,6 +175,9 @@ fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
                     },
                     None => show_error!(&format!("Missing color after {}.", arg)),
                 }
+            }
+            "-0" => {
+                config.show_zeroes = false;
             }
             _ => {
                 // takes the first unquoted word or "quoted string of words" ignoring any words, strings, or invalid commands after
@@ -244,7 +268,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
 
         if !config.is_blinking {
-            text = format_time(total_seconds);
+            text = format_time(total_seconds, config.show_zeroes);
             renderer.render(&text, &mut buf)?;
         }
 

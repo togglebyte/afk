@@ -17,4 +17,6 @@ Colors: Black, Red, Green, Yellow, Blue, Purple, Cyan, White
 
 -k  Allow countdown to go negative / Stopwatch mode
 
+-0 Hide hour or minutes when zero
+
 --help  shows this help
