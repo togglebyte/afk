@@ -147,14 +147,12 @@ fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
                 None => show_error!(&format!("Missing number after {}.", arg)),
             },
             "-c" => {
-                config.color = {
-                    match args.next() {
-                        Some(c) => match parse_color(c) {
-                            Some(c) => c,
-                            None => show_error!(&format!("Unknown color after {}.", arg)),
-                        },
-                        None => show_error!(&format!("Missing color after {}.", arg)),
-                    }
+                config.color = match args.next() {
+                    Some(c) => match parse_color(c) {
+                        Some(c) => c,
+                        None => show_error!(&format!("Unknown color after {}.", arg)),
+                    },
+                    None => show_error!(&format!("Missing color after {}.", arg)),
                 }
             }
             _ => {
@@ -186,12 +184,9 @@ fn parse_color(color: &str) -> Option<Colour> {
         "white" => Colour::White,
         _ => {
             // Check for RGB color value formatted as 42,42,42
-            let rgb = color
-                .contains(&[',', ' '][..])
-                .then(|| color.split(&[',', ' '][..])
-                    .map(str::parse::<u8>)
-                    .filter_map(Result::ok)
-                    .collect::<Vec<u8>>())?;
+            let rgb = color.contains(&[',', ' '][..]).then(|| {
+                color.split(&[',', ' '][..]).map(str::parse::<u8>).filter_map(Result::ok).collect::<Vec<u8>>()
+            })?;
 
             if rgb.len() != 3 {
                 show_error!("RGB values should have 3 numbers separated by commas.");
