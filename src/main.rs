@@ -1,7 +1,7 @@
 use std::{
     env::args,
     error::Error,
-    io::Write,
+    io::{Stdout, Write},
     sync::mpsc::{self, Sender},
     thread,
     time::{Duration, Instant},
@@ -192,6 +192,29 @@ fn parse_color(color: &str) -> Option<Colour> {
     Some(color)
 }
 
+fn print_words(out: &mut Stdout, renderer: &Renderer, config: &AfkConfig) -> Result<u16, Box<dyn Error>> {
+    if config.words.is_empty() {
+        return Ok(1);
+    }
+
+    let words = if config.use_font {
+        let mut buf = Vec::with_capacity(config.words.len() * 8);
+        renderer.render(&config.words, &mut buf)?;
+        String::from_utf8(buf)?
+    } else {
+        config.words.clone()
+    };
+
+    out.queue(Print(config.style.paint(&words)))?;
+
+    let offset = words.lines().count() as u16;
+
+    match offset {
+        1.. => Ok(offset),
+        0 => Ok(1),
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let arg = args().skip(1).collect::<Vec<_>>();
 
@@ -209,10 +232,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let font_data = include_str!("../resources/Ghost.flf").to_owned();
-    let font = parse(font_data).unwrap();
+    let num_font = parse(include_str!("../resources/Ghost.flf").to_string()).unwrap();
+    let words_font = parse(include_str!("../resources/Big.flf").to_string()).unwrap();
+
     let mut stdout = init().unwrap();
-    let renderer = Renderer::new(font);
 
     let mut total_seconds = config.hours * 60 * 60 + config.minutes * 60 + config.seconds;
     let mut old_lines: Vec<String> = Vec::new();
@@ -221,11 +244,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     events(tx.clone());
     tick_timer(tx);
 
-    let paint = Style::new().fg(config.color).bold();
+    stdout.queue(MoveTo(0, 0))?;
 
-    let offset_y = 3;
-    stdout.queue(MoveTo(2, offset_y - 1))?;
-    stdout.queue(Print(paint.paint(&config.words)))?;
+    let offset_y = print_words(&mut stdout, &Renderer::new(words_font), &config)?;
+
+    let renderer = Renderer::new(num_font);
 
     loop {
         #[allow(unused_assignments)]
@@ -245,14 +268,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             let lines = txt.lines().map(|l| l.to_string()).collect::<Vec<_>>();
 
             for (i, line) in old_lines.drain(..).enumerate() {
-                stdout.queue(MoveTo(0, offset_y + i as u16))?;
+                stdout.queue(MoveTo(0, (offset_y as i32 + i as i32) as u16))?;
                 let line = line.to_string();
                 stdout.queue(Print(" ".repeat(line.len())))?;
             }
 
+            let mut i_offset = 0;
+
             for (i, line) in lines.iter().enumerate() {
-                stdout.queue(MoveTo(0, offset_y + i as u16))?;
-                stdout.queue(Print(paint.paint(line)))?;
+                if line.trim().is_empty() {
+                    i_offset += 1;
+                    continue;
+                }
+                stdout.queue(MoveTo(0, (offset_y as i32 - i_offset + i as i32) as u16))?;
+                stdout.queue(Print(config.style.paint(line)))?;
             }
 
             old_lines = lines;
