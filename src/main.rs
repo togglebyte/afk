@@ -22,10 +22,7 @@ fn events(tx: Tx) {
     thread::spawn(move || loop {
         if let Ok(ev) = event::read() {
             match ev {
-                event::Event::Key(event::KeyEvent {
-                    code: event::KeyCode::Esc,
-                    ..
-                }) => {
+                event::Event::Key(event::KeyEvent { code: event::KeyCode::Esc, .. }) => {
                     let _ = tx.send(Event::Quit);
                 }
                 event::Event::Key(event::KeyEvent {
@@ -59,16 +56,8 @@ fn format_time(mut total_sec: i128, show_zeroes: bool) -> String {
     format!(
         "{}{}{}{:0>2}",
         if is_less_than_zero { "-" } else { "" },
-        if hours.eq(&0) && !show_zeroes {
-            "".to_string()
-        } else {
-            format!("{:0>2}:", hours)
-        },
-        if hours.eq(&0) && minutes.eq(&0) && !show_zeroes {
-            "".to_string()
-        } else {
-            format!("{:0>2}:", minutes)
-        },
+        if hours.eq(&0) && !show_zeroes { "".to_string() } else { format!("{:0>2}:", hours) },
+        if hours.eq(&0) && minutes.eq(&0) && !show_zeroes { "".to_string() } else { format!("{:0>2}:", minutes) },
         seconds
     )
 }
