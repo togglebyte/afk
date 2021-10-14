@@ -67,12 +67,13 @@ struct AfkConfig {
     hours: i128,
     minutes: i128,
     seconds: i128,
-    color: Colour,
+    style: Style,
     words: String,
     blink_timer: Instant,
     blink_rate: u64, // in ms
     is_blinking: bool,
     show_zeroes: bool,
+    use_font: bool,
 }
 
 impl Default for AfkConfig {
@@ -82,12 +83,13 @@ impl Default for AfkConfig {
             hours: 0,
             minutes: 0,
             seconds: 0,
-            color: Colour::White,
+            style: Style::new().fg(Colour::White),
             words: "".to_string(),
             blink_timer: Instant::now(),
             blink_rate: 500,
             is_blinking: false,
             show_zeroes: true,
+            use_font: false,
         }
     }
 }
@@ -101,29 +103,8 @@ impl AfkConfig {
     }
 }
 
-// TODO: format this with nice colors and stuff
 fn show_help() {
-    let help = r#"
-Usage: afk "some text to show" -h # -m # -s # -k -c blue
-
-Text to display can be empty, a single word, or a "quoted string" of words.
-
--h #  Number of hours to count down
--m #  Number of minutes to count down
--s #  Number of seconds to count down
-You can enter time in any combination of hms or just one.
-The application will adjust it. Ex: -s 90 will translate to 1m 30s.
-
--c color  colors the text with a bold foreground color.
-Colors: Black, Red, Green, Yellow, Blue, Purple, Cyan, White
-Color can be an comma separated RGB value: 42,42,42
-
--k Allow countdown to go negative / Stopwatch mode
-
--0 Hide hour or minutes when zero
-
---help  shows this help
-"#;
+    let help = include_str!("../README.md");
 
     println!("{}", Style::new().fg(Colour::Blue).bold().paint(help));
 }
@@ -157,17 +138,16 @@ fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
                 None => show_error!(&format!("Missing number after {}.", arg)),
             },
             "-c" => {
-                config.color = match args.next() {
+                config.style = match args.next() {
                     Some(c) => match parse_color(c) {
-                        Some(c) => c,
+                        Some(c) => Style::new().fg(c).bold(),
                         None => show_error!(&format!("Unknown color after {}.", arg)),
                     },
                     None => show_error!(&format!("Missing color after {}.", arg)),
                 }
             }
-            "-0" => {
-                config.show_zeroes = false;
-            }
+            "-0" => config.show_zeroes = false,
+            "-f" => config.use_font = true,
             _ => {
                 // takes the first unquoted word or "quoted string of words" ignoring any words, strings, or invalid commands after
                 if config.words.is_empty() {
