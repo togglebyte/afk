@@ -205,6 +205,8 @@ fn print_words(out: &mut Stdout, renderer: &Renderer, config: &AfkConfig) -> Res
         config.words.clone()
     };
 
+    let words: String = words.lines().filter(|l| !l.trim_end().is_empty()).map(|l| format!("{}\r\n", l)).collect();
+
     out.queue(Print(config.style.paint(&words)))?;
 
     let offset = words.lines().count() as u16;
