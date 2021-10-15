@@ -1,5 +1,3 @@
-**Note** this entire project is a bit of a hack thrown together as I needed a
-timer.
 
 Usage: afk "some text to show" -h # -m # -s # -k -c blue
 
@@ -18,5 +16,7 @@ Colors: Black, Red, Green, Yellow, Blue, Purple, Cyan, White
 -k  Allow countdown to go negative / Stopwatch mode
 
 -0 Hide hour or minutes when zero
+
+-f Use figgle font for message
 
 --help  shows this help

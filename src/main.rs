@@ -1,7 +1,7 @@
 use std::{
     env::args,
     error::Error,
-    io::Write,
+    io::{Stdout, Write},
     sync::mpsc::{self, Sender},
     thread,
     time::{Duration, Instant},
@@ -22,10 +22,7 @@ fn events(tx: Tx) {
     thread::spawn(move || loop {
         if let Ok(ev) = event::read() {
             match ev {
-                event::Event::Key(event::KeyEvent {
-                    code: event::KeyCode::Esc,
-                    ..
-                }) => {
+                event::Event::Key(event::KeyEvent { code: event::KeyCode::Esc, .. }) => {
                     let _ = tx.send(Event::Quit);
                 }
                 event::Event::Key(event::KeyEvent {
@@ -59,16 +56,8 @@ fn format_time(mut total_sec: i128, show_zeroes: bool) -> String {
     format!(
         "{}{}{}{:0>2}",
         if is_less_than_zero { "-" } else { "" },
-        if hours.eq(&0) && !show_zeroes {
-            "".to_string()
-        } else {
-            format!("{:0>2}:", hours)
-        },
-        if hours.eq(&0) && minutes.eq(&0) && !show_zeroes {
-            "".to_string()
-        } else {
-            format!("{:0>2}:", minutes)
-        },
+        if hours.eq(&0) && !show_zeroes { "".to_string() } else { format!("{:0>2}:", hours) },
+        if hours.eq(&0) && minutes.eq(&0) && !show_zeroes { "".to_string() } else { format!("{:0>2}:", minutes) },
         seconds
     )
 }
@@ -78,12 +67,13 @@ struct AfkConfig {
     hours: i128,
     minutes: i128,
     seconds: i128,
-    color: Colour,
+    style: Style,
     words: String,
     blink_timer: Instant,
     blink_rate: u64, // in ms
     is_blinking: bool,
     show_zeroes: bool,
+    use_font: bool,
 }
 
 impl Default for AfkConfig {
@@ -93,12 +83,13 @@ impl Default for AfkConfig {
             hours: 0,
             minutes: 0,
             seconds: 0,
-            color: Colour::White,
+            style: Style::new().fg(Colour::White),
             words: "".to_string(),
             blink_timer: Instant::now(),
             blink_rate: 500,
             is_blinking: false,
             show_zeroes: true,
+            use_font: false,
         }
     }
 }
@@ -112,29 +103,8 @@ impl AfkConfig {
     }
 }
 
-// TODO: format this with nice colors and stuff
 fn show_help() {
-    let help = r#"
-Usage: afk "some text to show" -h # -m # -s # -k -c blue
-
-Text to display can be empty, a single word, or a "quoted string" of words.
-
--h #  Number of hours to count down
--m #  Number of minutes to count down
--s #  Number of seconds to count down
-You can enter time in any combination of hms or just one.
-The application will adjust it. Ex: -s 90 will translate to 1m 30s.
-
--c color  colors the text with a bold foreground color.
-Colors: Black, Red, Green, Yellow, Blue, Purple, Cyan, White
-Color can be an comma separated RGB value: 42,42,42
-
--k Allow countdown to go negative / Stopwatch mode
-
--0 Hide hour or minutes when zero
-
---help  shows this help
-"#;
+    let help = include_str!("../README.md");
 
     println!("{}", Style::new().fg(Colour::Blue).bold().paint(help));
 }
@@ -168,17 +138,16 @@ fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
                 None => show_error!(&format!("Missing number after {}.", arg)),
             },
             "-c" => {
-                config.color = match args.next() {
+                config.style = match args.next() {
                     Some(c) => match parse_color(c) {
-                        Some(c) => c,
+                        Some(c) => Style::new().fg(c).bold(),
                         None => show_error!(&format!("Unknown color after {}.", arg)),
                     },
                     None => show_error!(&format!("Missing color after {}.", arg)),
                 }
             }
-            "-0" => {
-                config.show_zeroes = false;
-            }
+            "-0" => config.show_zeroes = false,
+            "-f" => config.use_font = true,
             _ => {
                 // takes the first unquoted word or "quoted string of words" ignoring any words, strings, or invalid commands after
                 if config.words.is_empty() {
@@ -223,6 +192,31 @@ fn parse_color(color: &str) -> Option<Colour> {
     Some(color)
 }
 
+fn print_words(out: &mut Stdout, renderer: &Renderer, config: &AfkConfig) -> Result<u16, Box<dyn Error>> {
+    if config.words.is_empty() {
+        return Ok(1);
+    }
+
+    let words = if config.use_font {
+        let mut buf = Vec::with_capacity(config.words.len() * 8);
+        renderer.render(&config.words, &mut buf)?;
+        String::from_utf8(buf)?
+    } else {
+        config.words.clone()
+    };
+
+    let words: String = words.lines().filter(|l| !l.trim_end().is_empty()).map(|l| format!("{}\r\n", l)).collect();
+
+    out.queue(Print(config.style.paint(&words)))?;
+
+    let offset = words.lines().count() as u16;
+
+    match offset {
+        1.. => Ok(offset),
+        0 => Ok(1),
+    }
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let arg = args().skip(1).collect::<Vec<_>>();
 
@@ -240,10 +234,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let font_data = include_str!("../resources/Ghost.flf").to_owned();
-    let font = parse(font_data).unwrap();
-    let mut stdout = init().unwrap();
-    let renderer = Renderer::new(font);
+    let num_font = parse(include_str!("../resources/Ghost.flf").to_string()).expect("Failed to parse font: Ghost.flf");
+    let words_font = parse(include_str!("../resources/Big.flf").to_string()).expect("Failed to parse font: Big.flf");
+
+    let mut stdout = init().expect("Failed to acquire stdout.");
 
     let mut total_seconds = config.hours * 60 * 60 + config.minutes * 60 + config.seconds;
     let mut old_lines: Vec<String> = Vec::new();
@@ -252,11 +246,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     events(tx.clone());
     tick_timer(tx);
 
-    let paint = Style::new().fg(config.color).bold();
+    stdout.queue(MoveTo(0, 0))?;
 
-    let offset_y = 3;
-    stdout.queue(MoveTo(2, offset_y - 1))?;
-    stdout.queue(Print(paint.paint(&config.words)))?;
+    let offset_y = print_words(&mut stdout, &Renderer::new(words_font), &config)?;
+
+    let renderer = Renderer::new(num_font);
 
     loop {
         #[allow(unused_assignments)]
@@ -276,14 +270,20 @@ fn main() -> Result<(), Box<dyn Error>> {
             let lines = txt.lines().map(|l| l.to_string()).collect::<Vec<_>>();
 
             for (i, line) in old_lines.drain(..).enumerate() {
-                stdout.queue(MoveTo(0, offset_y + i as u16))?;
+                stdout.queue(MoveTo(0, (offset_y as i32 + i as i32) as u16))?;
                 let line = line.to_string();
                 stdout.queue(Print(" ".repeat(line.len())))?;
             }
 
+            let mut num_y_offset = 0;
+
             for (i, line) in lines.iter().enumerate() {
-                stdout.queue(MoveTo(0, offset_y + i as u16))?;
-                stdout.queue(Print(paint.paint(line)))?;
+                if line.trim().is_empty() {
+                    num_y_offset += 1;
+                    continue;
+                }
+                stdout.queue(MoveTo(0, (offset_y as i32 - num_y_offset + i as i32) as u16))?;
+                stdout.queue(Print(config.style.paint(line)))?;
             }
 
             old_lines = lines;
