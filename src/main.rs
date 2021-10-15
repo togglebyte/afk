@@ -234,10 +234,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let num_font = parse(include_str!("../resources/Ghost.flf").to_string()).unwrap();
-    let words_font = parse(include_str!("../resources/Big.flf").to_string()).unwrap();
+    let num_font = parse(include_str!("../resources/Ghost.flf").to_string()).expect("Failed to parse font: Ghost.flf");
+    let words_font = parse(include_str!("../resources/Big.flf").to_string()).expect("Failed to parse font: Big.flf");
 
-    let mut stdout = init().unwrap();
+    let mut stdout = init().expect("Failed to acquire stdout.");
 
     let mut total_seconds = config.hours * 60 * 60 + config.minutes * 60 + config.seconds;
     let mut old_lines: Vec<String> = Vec::new();
@@ -275,14 +275,14 @@ fn main() -> Result<(), Box<dyn Error>> {
                 stdout.queue(Print(" ".repeat(line.len())))?;
             }
 
-            let mut i_offset = 0;
+            let mut num_y_offset = 0;
 
             for (i, line) in lines.iter().enumerate() {
                 if line.trim().is_empty() {
-                    i_offset += 1;
+                    num_y_offset += 1;
                     continue;
                 }
-                stdout.queue(MoveTo(0, (offset_y as i32 - i_offset + i as i32) as u16))?;
+                stdout.queue(MoveTo(0, (offset_y as i32 - num_y_offset + i as i32) as u16))?;
                 stdout.queue(Print(config.style.paint(line)))?;
             }
 
