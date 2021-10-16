@@ -8,29 +8,24 @@ use std::{
 };
 
 use ansi_term::{Colour, Style};
-use crossterm::{cursor::MoveTo, event, style::Print, QueueableCommand};
+use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
 use figglebit::{cleanup, init, parse, Renderer};
 
-type Tx = Sender<Event>;
+type Tx = Sender<AppEvent>;
 
-enum Event {
+enum AppEvent {
     Tick,
     Quit,
 }
 
 fn events(tx: Tx) {
+    use crossterm::event::{self, Event as CEvent, KeyCode, KeyEvent, KeyModifiers as KeyMods};
+
     thread::spawn(move || loop {
-        if let Ok(ev) = event::read() {
-            match ev {
-                event::Event::Key(event::KeyEvent { code: event::KeyCode::Esc, .. }) => {
-                    let _ = tx.send(Event::Quit);
-                }
-                event::Event::Key(event::KeyEvent {
-                    code: event::KeyCode::Char('c'),
-                    modifiers: event::KeyModifiers::CONTROL,
-                }) => {
-                    let _ = tx.send(Event::Quit);
-                }
+        if let Ok(CEvent::Key(KeyEvent { code, modifiers })) = event::read() {
+            match code {
+                KeyCode::Esc => drop(tx.send(AppEvent::Quit)),
+                KeyCode::Char('c') if modifiers.contains(KeyMods::CONTROL) => drop(tx.send(AppEvent::Quit)),
                 _ => {}
             }
         }
@@ -40,11 +35,11 @@ fn events(tx: Tx) {
 fn tick_timer(tx: Tx) {
     thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(1));
-        let _ = tx.send(Event::Tick);
+        let _ = tx.send(AppEvent::Tick);
     });
 }
 
-fn format_time(mut total_sec: i128, show_zeroes: bool) -> String {
+fn format_time(mut total_sec: i32, show_zeroes: bool) -> String {
     let is_less_than_zero = total_sec < 0;
     if is_less_than_zero {
         total_sec *= -1;
@@ -64,9 +59,9 @@ fn format_time(mut total_sec: i128, show_zeroes: bool) -> String {
 
 struct AfkConfig {
     allow_negative: bool,
-    hours: i128,
-    minutes: i128,
-    seconds: i128,
+    hours: i32,
+    minutes: i32,
+    seconds: i32,
     style: Style,
     words: String,
     blink_timer: Instant,
@@ -116,7 +111,11 @@ macro_rules! show_error {
     }};
 }
 
-fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
+fn parse_args(args: &[String]) -> Option<AfkConfig> {
+    if args.is_empty() {
+        return None;
+    }
+
     let mut config = AfkConfig::default();
 
     let mut args = args.iter();
@@ -159,7 +158,7 @@ fn parse_args(args: Vec<String>) -> Option<AfkConfig> {
 
     // prefer some time to act against, unless allow_negative, which is basically just a stopwatch
     if config.hours.eq(&0) && config.minutes.eq(&0) && config.seconds.eq(&0) && !config.allow_negative {
-        show_error!(&format!("Please specifiy some time or -k for stopwatch."));
+        show_error!("Please specifiy some time or -k for stopwatch.");
     }
 
     Some(config)
@@ -176,7 +175,7 @@ fn parse_color(color: &str) -> Option<Colour> {
         "cyan" => Colour::Cyan,
         "white" => Colour::White,
         _ => {
-            // Check for RGB color value formatted as 42,42,42
+            // Check for RGB color value formatted as 42,42,42 or "42 42 42"
             let rgb = color.contains(&[',', ' '][..]).then(|| {
                 color.split(&[',', ' '][..]).map(str::parse::<u8>).filter_map(Result::ok).collect::<Vec<u8>>()
             })?;
@@ -192,6 +191,9 @@ fn parse_color(color: &str) -> Option<Colour> {
     Some(color)
 }
 
+// this returns the y offset for the fig font numbers to start printing from
+// a single line message will always be 1(since it prints on 0)
+// a fig font message will be > 1 unless something is borked with the font
 fn print_words(out: &mut Stdout, renderer: &Renderer, config: &AfkConfig) -> Result<u16, Box<dyn Error>> {
     if config.words.is_empty() {
         return Ok(1);
@@ -218,20 +220,14 @@ fn print_words(out: &mut Stdout, renderer: &Renderer, config: &AfkConfig) -> Res
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let arg = args().skip(1).collect::<Vec<_>>();
+    let args = args().skip(1).collect::<Vec<_>>();
 
-    // display a helper, so they know how to use it
-    if arg.is_empty() {
+    let mut config = if let Some(config) = parse_args(&args) {
+        config
+    } else {
+        // display a helper, so they know how to use it
         show_help();
         return Ok(());
-    }
-
-    let mut config = match parse_args(arg) {
-        Some(w) => w,
-        None => {
-            show_help();
-            return Ok(());
-        }
     };
 
     let num_font = parse(include_str!("../resources/Ghost.flf").to_string()).expect("Failed to parse font: Ghost.flf");
@@ -248,29 +244,29 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     stdout.queue(MoveTo(0, 0))?;
 
-    let offset_y = print_words(&mut stdout, &Renderer::new(words_font), &config)?;
+    // print the message one time. resizing the window too small will erase whatever goes past the window edge
+    // cast now, so we don't cast muiltiple later
+    let offset_y = print_words(&mut stdout, &Renderer::new(words_font), &config)? as i32;
 
     let renderer = Renderer::new(num_font);
 
     loop {
-        #[allow(unused_assignments)]
-        let mut text = String::new();
-        let mut buf = Vec::new();
-
         if total_seconds == 0 && !config.allow_negative {
             config.flip_blinker();
         }
 
+        let mut buf = Vec::new();
         if !config.is_blinking {
-            text = format_time(total_seconds, config.show_zeroes);
+            let text = format_time(total_seconds, config.show_zeroes);
             renderer.render(&text, &mut buf)?;
         }
 
         if let Ok(txt) = String::from_utf8(buf) {
-            let lines = txt.lines().map(|l| l.to_string()).collect::<Vec<_>>();
+            let lines = txt.lines().map(ToString::to_string).collect::<Vec<_>>();
 
             for (i, line) in old_lines.drain(..).enumerate() {
-                stdout.queue(MoveTo(0, (offset_y as i32 + i as i32) as u16))?;
+                let i = i as i32;
+                stdout.queue(MoveTo(0, (offset_y + i) as u16))?;
                 let line = line.to_string();
                 stdout.queue(Print(" ".repeat(line.len())))?;
             }
@@ -278,11 +274,12 @@ fn main() -> Result<(), Box<dyn Error>> {
             let mut num_y_offset = 0;
 
             for (i, line) in lines.iter().enumerate() {
+                let i = i as i32;
                 if line.trim().is_empty() {
                     num_y_offset += 1;
                     continue;
                 }
-                stdout.queue(MoveTo(0, (offset_y as i32 - num_y_offset + i as i32) as u16))?;
+                stdout.queue(MoveTo(0, (offset_y - num_y_offset + i) as u16))?;
                 stdout.queue(Print(config.style.paint(line)))?;
             }
 
@@ -290,14 +287,14 @@ fn main() -> Result<(), Box<dyn Error>> {
             stdout.flush()?;
         }
 
-        if let Ok(ev) = rx.try_recv() {
-            match ev {
-                Event::Tick => {
+        if let Ok(app_event) = rx.try_recv() {
+            match app_event {
+                AppEvent::Tick => {
                     if total_seconds > 0 || config.allow_negative {
                         total_seconds -= 1;
                     }
                 }
-                Event::Quit => break,
+                AppEvent::Quit => break,
             }
         }
 
