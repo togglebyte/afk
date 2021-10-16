@@ -246,6 +246,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // print the message one time. resizing the window too small will erase whatever goes past the window edge
     // cast now, so we don't cast muiltiple later
+    // SAFE/LOSSLESS: because it came from a u16 anyway
     let offset_y = print_words(&mut stdout, &Renderer::new(words_font), &config)? as i32;
 
     let renderer = Renderer::new(num_font);
