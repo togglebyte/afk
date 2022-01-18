@@ -2,13 +2,14 @@ use std::{
     env::args,
     error::Error,
     io::{Stdout, Write},
+    iter,
     sync::mpsc::{self, Sender},
     thread,
     time::{Duration, Instant},
 };
 
 use ansi_term::{Colour, Style};
-use crossterm::{cursor::MoveTo, style::Print, QueueableCommand};
+use crossterm::{cursor::MoveTo, style::Print, terminal, QueueableCommand};
 use figglebit::{cleanup, init, parse, Renderer};
 
 type Tx = Sender<AppEvent>;
@@ -69,6 +70,9 @@ struct AfkConfig {
     is_blinking: bool,
     show_zeroes: bool,
     use_font: bool,
+    message_padding: (u16, u16),
+    timer_padding: (u16, u16),
+    center_timer: bool,
 }
 
 impl Default for AfkConfig {
@@ -85,6 +89,10 @@ impl Default for AfkConfig {
             is_blinking: false,
             show_zeroes: true,
             use_font: false,
+            // Default behavior of legacy afk
+            message_padding: (2, 2),
+            timer_padding: (0, 2),
+            center_timer: false,
         }
     }
 }
@@ -118,7 +126,7 @@ fn parse_args(args: &[String]) -> Option<AfkConfig> {
 
     let mut config = AfkConfig::default();
 
-    let mut args = args.iter();
+    let mut args = args.iter().peekable();
 
     while let Some(arg) = args.next() {
         match arg.to_lowercase().as_ref() {
@@ -147,6 +155,35 @@ fn parse_args(args: &[String]) -> Option<AfkConfig> {
             }
             "-0" => config.show_zeroes = false,
             "-f" => config.use_font = true,
+            "-z" => config.center_timer = true,
+            "-p" => {
+                config.message_padding = match (args.next(), args.peek()) {
+                    (Some(x), Some(y)) if !y.starts_with('-') => match (x.parse(), y.parse()) {
+                        (Ok(x), Ok(y)) => (x, y),
+                        (Err(_), _) => show_error!(&format!("Cannout parse number {x} after {arg}.")),
+                        (_, _) => show_error!(&format!("Cannout parse number {y} after {arg}.")),
+                    },
+                    (Some(p), _) => match p.parse() {
+                        Ok(p) => (p, p),
+                        Err(_) => show_error!(&format!("Cannout parse number {p} after {arg}.")),
+                    },
+                    _ => show_error!(&format!("Missing padding after {arg}.")),
+                }
+            }
+            "-t" => {
+                config.timer_padding = match (args.next(), args.peek()) {
+                    (Some(x), Some(y)) if !y.starts_with('-') => match (x.parse(), y.parse()) {
+                        (Ok(x), Ok(y)) => (x, y),
+                        (Err(_), _) => show_error!(&format!("Cannout parse number {x} after {arg}.")),
+                        (_, _) => show_error!(&format!("Cannout parse number {y} after {arg}.")),
+                    },
+                    (Some(p), _) => match p.parse() {
+                        Ok(p) => (p, p),
+                        Err(_) => show_error!(&format!("Cannout parse number {p} after {arg}.")),
+                    },
+                    _ => show_error!(&format!("Missing padding after {arg}.")),
+                }
+            }
             _ => {
                 // takes the first unquoted word or "quoted string of words" ignoring any words, strings, or invalid commands after
                 if config.words.is_empty() {
@@ -196,7 +233,7 @@ fn parse_color(color: &str) -> Option<Colour> {
 // a fig font message will be > 1 unless something is borked with the font
 fn print_words(out: &mut Stdout, renderer: &Renderer, config: &AfkConfig) -> Result<u16, Box<dyn Error>> {
     if config.words.is_empty() {
-        return Ok(1);
+        return Ok(1 + config.message_padding.1);
     }
 
     let words = if config.use_font {
@@ -207,7 +244,11 @@ fn print_words(out: &mut Stdout, renderer: &Renderer, config: &AfkConfig) -> Res
         config.words.clone()
     };
 
-    let words: String = words.lines().filter(|l| !l.trim_end().is_empty()).map(|l| format!("{}\r\n", l)).collect();
+    let padding_x = " ".repeat(config.message_padding.0.into());
+    let words: String = iter::repeat("\r\n".to_owned())
+        .take(config.message_padding.1.into())
+        .chain(words.lines().filter(|l| !l.trim_end().is_empty()).map(|l| format!("{padding_x}{l}\r\n")))
+        .collect();
 
     out.queue(Print(config.style.paint(&words)))?;
 
@@ -237,6 +278,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut total_seconds = config.hours * 60 * 60 + config.minutes * 60 + config.seconds;
     let mut old_lines: Vec<String> = Vec::new();
+    let mut offset_x = config.timer_padding.0;
 
     let (tx, rx) = mpsc::channel();
     events(tx.clone());
@@ -247,7 +289,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     // print the message one time. resizing the window too small will erase whatever goes past the window edge
     // cast now, so we don't cast muiltiple later
     // SAFE/LOSSLESS: because it came from a u16 anyway
-    let offset_y = print_words(&mut stdout, &Renderer::new(words_font), &config)? as i32;
+    let offset_y = (print_words(&mut stdout, &Renderer::new(words_font), &config)? + config.timer_padding.1) as i32;
 
     let renderer = Renderer::new(num_font);
 
@@ -267,12 +309,19 @@ fn main() -> Result<(), Box<dyn Error>> {
 
             for (i, line) in old_lines.drain(..).enumerate() {
                 let i = i as i32;
-                stdout.queue(MoveTo(0, (offset_y + i) as u16))?;
-                let line = line.to_string();
+                stdout.queue(MoveTo(offset_x, (offset_y + i) as u16))?;
                 stdout.queue(Print(" ".repeat(line.len())))?;
             }
 
             let mut num_y_offset = 0;
+
+            if config.center_timer {
+                // if the text is empty it does not matter that we do not update the offset_x
+                if let Some(max_width) = lines.iter().map(String::len).max() {
+                    let term_width = terminal::size()?.0;
+                    offset_x = (term_width - max_width as u16) / 2;
+                }
+            }
 
             for (i, line) in lines.iter().enumerate() {
                 let i = i as i32;
@@ -280,7 +329,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     num_y_offset += 1;
                     continue;
                 }
-                stdout.queue(MoveTo(0, (offset_y - num_y_offset + i) as u16))?;
+                stdout.queue(MoveTo(offset_x, (offset_y - num_y_offset + i) as u16))?;
                 stdout.queue(Print(config.style.paint(line)))?;
             }
 

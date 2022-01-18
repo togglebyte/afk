@@ -13,10 +13,19 @@ Color can be a comma or quoted space separated RGB value: 42,42,42 or "42 42 42"
 -c color  colors the text with a bold foreground color.
 Colors: Black, Red, Green, Yellow, Blue, Purple, Cyan, White
 
--k  Allow countdown to go negative / Stopwatch mode
+-k Allow countdown to go negative / Stopwatch mode
 
 -0 Hide hour or minutes when zero
 
 -f Use figgle font for message
+
+-z Horizontally centers the timer
+
+-p # Same message padding for top and bottom
+-p # # Different message padding for top and bottom
+
+-t # Same timer padding for top and bottom
+-t # # Different timer padding for top and bottom
+Horizontal padding will only be applied when timer is not centered
 
 --help  shows this help
