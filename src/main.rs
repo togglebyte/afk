@@ -140,7 +140,7 @@ fn parse_args(args: &[String]) -> Option<AfkConfig> {
                         "-s" => config.seconds = t,
                         _ => {}
                     },
-                    Err(_) => show_error!(&format!("Cannout parse number after {}.", arg)),
+                    Err(_) => show_error!(&format!("Cannot parse number after {}.", arg)),
                 },
                 None => show_error!(&format!("Missing number after {}.", arg)),
             },
@@ -160,12 +160,12 @@ fn parse_args(args: &[String]) -> Option<AfkConfig> {
                 config.message_padding = match (args.next(), args.peek()) {
                     (Some(x), Some(y)) if !y.starts_with('-') => match (x.parse(), y.parse()) {
                         (Ok(x), Ok(y)) => (x, y),
-                        (Err(_), _) => show_error!(&format!("Cannout parse number {x} after {arg}.")),
-                        (_, _) => show_error!(&format!("Cannout parse number {y} after {arg}.")),
+                        (Err(_), _) => show_error!(&format!("Cannot parse number {x} after {arg}.")),
+                        (_, _) => show_error!(&format!("Cannot parse number {y} after {arg}.")),
                     },
                     (Some(p), _) => match p.parse() {
                         Ok(p) => (p, p),
-                        Err(_) => show_error!(&format!("Cannout parse number {p} after {arg}.")),
+                        Err(_) => show_error!(&format!("Cannot parse number {p} after {arg}.")),
                     },
                     _ => show_error!(&format!("Missing padding after {arg}.")),
                 }
@@ -174,8 +174,8 @@ fn parse_args(args: &[String]) -> Option<AfkConfig> {
                 config.timer_padding = match (args.next(), args.peek()) {
                     (Some(x), Some(y)) if !y.starts_with('-') => match (x.parse(), y.parse()) {
                         (Ok(x), Ok(y)) => (x, y),
-                        (Err(_), _) => show_error!(&format!("Cannout parse number {x} after {arg}.")),
-                        (_, _) => show_error!(&format!("Cannout parse number {y} after {arg}.")),
+                        (Err(_), _) => show_error!(&format!("Cannot parse number {x} after {arg}.")),
+                        (_, _) => show_error!(&format!("Cannot parse number {y} after {arg}.")),
                     },
                     (Some(p), _) => match p.parse() {
                         Ok(p) => (p, p),
