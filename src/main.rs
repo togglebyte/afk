@@ -16,6 +16,7 @@ type Tx = Sender<AppEvent>;
 enum AppEvent {
     Tick,
     Quit,
+    ModifyTimer(i32),
 }
 
 fn events(tx: Tx) {
@@ -26,6 +27,13 @@ fn events(tx: Tx) {
             match code {
                 KeyCode::Esc => drop(tx.send(AppEvent::Quit)),
                 KeyCode::Char('c') if modifiers.contains(KeyMods::CONTROL) => drop(tx.send(AppEvent::Quit)),
+                KeyCode::Char('q') => drop(tx.send(AppEvent::Quit)),
+                KeyCode::Char('s') => drop(tx.send(AppEvent::ModifyTimer(-1))),
+                KeyCode::Char('S') => drop(tx.send(AppEvent::ModifyTimer(1))),
+                KeyCode::Char('m') => drop(tx.send(AppEvent::ModifyTimer(-60))),
+                KeyCode::Char('M') => drop(tx.send(AppEvent::ModifyTimer(60))),
+                KeyCode::Char('h') => drop(tx.send(AppEvent::ModifyTimer(-3600))),
+                KeyCode::Char('H') => drop(tx.send(AppEvent::ModifyTimer(3600))),
                 _ => {}
             }
         }
@@ -254,6 +262,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     loop {
         if total_seconds == 0 && !config.allow_negative {
             config.flip_blinker();
+        } else {
+            config.is_blinking = false;
         }
 
         let mut buf = Vec::new();
@@ -296,6 +306,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                 }
                 AppEvent::Quit => break,
+                AppEvent::ModifyTimer(s) => {
+                    total_seconds += s;
+                    if total_seconds < 0 && !config.allow_negative {
+                        total_seconds = 0;
+                    }
+                }
             }
         }
 
