@@ -20,3 +20,9 @@ Colors: Black, Red, Green, Yellow, Blue, Purple, Cyan, White
 -f Use figgle font for message
 
 --help  shows this help
+
+Keybinds
+
+Press ESC, CTRL+c or q to close
+Press s, m or h to decrease the timer by a second, minute or hour
+Press S, M or H to increase the timer by a second, minute or hour
